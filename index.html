@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmar Consulta | Hub Clínica</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+        <div class="bg-blue-600 p-8 text-white text-center">
+            <div class="bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold">Confirmação</h1>
+            <p id="status-text" class="opacity-90 text-sm mt-1">Verifique os dados abaixo</p>
+        </div>
+
+        <div class="p-8">
+            <div id="loading-state" class="flex flex-col items-center py-10">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+                <p class="text-slate-500 text-sm">A carregar detalhes da consulta...</p>
+            </div>
+
+            <div id="details-card" class="hidden space-y-6">
+                <div class="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Paciente</p>
+                        <p id="info-paciente" class="font-bold text-slate-800 text-lg">---</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Médico</p>
+                        <p id="info-medico" class="font-semibold text-slate-700">---</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data e Hora</p>
+                        <p id="info-data" class="font-semibold text-slate-700">---</p>
+                    </div>
+                </div>
+
+                <button id="btn-confirmar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-200 transition-all active:scale-95 disabled:opacity-50">
+                    Confirmar Agendamento
+                </button>
+            </div>
+
+            <div id="success-state" class="hidden text-center py-10">
+                <div class="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-800">Confirmado!</h2>
+                <p class="text-slate-600 mt-2">A sua presença foi registrada com sucesso.</p>
+            </div>
+        </div>
+
+        <div class="bg-slate-50 p-4 text-center border-t border-slate-100">
+            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Hub Clínica • AmigoApp</p>
+        </div>
+    </div>
+
+    <script>
+        const AMIGO_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJjb21wYW55X2lkIjoxMzc2LCJ1c2VyX2lkIjoxMTMyMn0.wdb2Q2uUJm6hZWr9vrwAae2-FM1eHSAuERKLWLBDTf8";
+        const API_BASE = "https://amigobot-api.amigoapp.com.br";
+
+        const params = new URLSearchParams(window.location.search);
+        const aid = params.get('id') ? Number(params.get('id')) : null;
+        const pid = params.get('pac') ? Number(params.get('pac')) : null;
+
+        function fixDate(dateStr) {
+            const date = new Date(dateStr);
+            date.setHours(date.getHours() + 3);
+            return date;
+        }
+
+        async function carregarDados() {
+            if (!aid || !pid || isNaN(aid) || isNaN(pid)) {
+                document.getElementById('loading-state').innerHTML = "<p class='text-red-500 font-bold'>Link inválido.</p>";
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/attendances/${pid}`, {
+                    headers: { 'Authorization': `Bearer ${AMIGO_TOKEN}` }
+                });
+                const json = await response.json();
+                const agendamento = (json.data || []).find(a => Number(a.id) === aid);
+
+                if (agendamento) {
+                    const dataCorrigida = fixDate(agendamento.start_date);
+                    document.getElementById('info-paciente').textContent = agendamento.patient?.name || "Paciente";
+                    document.getElementById('info-medico').textContent = agendamento.user?.name || "Não informado";
+                    document.getElementById('info-data').textContent = dataCorrigida.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+                    
+                    document.getElementById('loading-state').classList.add('hidden');
+                    document.getElementById('details-card').classList.remove('hidden');
+                } else {
+                    throw new Error("Consulta não encontrada.");
+                }
+            } catch (err) {
+                document.getElementById('loading-state').innerHTML = "<p class='text-red-500 font-bold'>Erro ao carregar dados.</p>";
+            }
+        }
+
+        document.getElementById('btn-confirmar').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-confirmar');
+            btn.disabled = true;
+            btn.textContent = "A processar...";
+
+            try {
+                const response = await fetch(`${API_BASE}/attendances/confirmed`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${AMIGO_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        patient_id: Number(pid),
+                        attendance_id: Number(aid) // Volte para attendance_id, mas garanta que é Number
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('details-card').classList.add('hidden');
+                    document.getElementById('success-state').classList.remove('hidden');
+                    document.getElementById('status-text').textContent = "Consulta Confirmada";
+                } else {
+                    // Se ainda der erro, vamos logar no console para você ver exatamente o que a API quer
+                    console.log("Erro completo da API:", result);
+                    alert("Erro da API: " + (result.message || result.error || "Erro 400"));
+                    btn.disabled = false;
+                    btn.textContent = "Confirmar Agendamento";
+                }
+            } catch (err) {
+                alert("Erro de ligação ao servidor.");
+                btn.disabled = false;
+                btn.textContent = "Confirmar Agendamento";
+            }
+        });
+
+        carregarDados();
+    </script>
+</body>
+</html>
