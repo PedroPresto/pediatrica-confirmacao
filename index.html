@@ -67,17 +67,57 @@
     </div>
 
     <script>
+        // CONFIGURAÇÕES
         const AMIGO_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJjb21wYW55X2lkIjoxMzc2LCJ1c2VyX2lkIjoxMTMyMn0.wdb2Q2uUJm6hZWr9vrwAae2-FM1eHSAuERKLWLBDTf8";
         const API_BASE = "https://amigobot-api.amigoapp.com.br";
+        
+        // CONFIGURAÇÃO TEMPORÁRIA DIGISAC (Preencha para a Demo)
+        const DIGISAC_CONFIG = {
+            URL: "https://clinicamultidiciplinar.digisac.chat", 
+            TOKEN: "742c25ef4b30990c54f2f2e823553e0376b8811e",
+            SERVICE_ID: "9dd3592c-7f45-4dad-8e63-6ec9feb58d51"
+        };
 
         const params = new URLSearchParams(window.location.search);
         const aid = params.get('id') ? Number(params.get('id')) : null;
         const pid = params.get('pac') ? Number(params.get('pac')) : null;
 
+        // Variável global para armazenar o telefone capturado
+        let telefonePaciente = null;
+
         function fixDate(dateStr) {
             const date = new Date(dateStr);
             date.setHours(date.getHours() + 3);
             return date;
+        }
+
+        async function enviarAgradecimentoDigisac(telefone) {
+            if (!telefone) return;
+            
+            // Garante o formato 55 + DDD + Número
+            const cleanPhone = telefone.replace(/\D/g, '');
+            const foneFormatado = cleanPhone.startsWith('55') ? cleanPhone : '55' + cleanPhone;
+
+            const payload = {
+                number: foneFormatado,
+                text: "Obrigado por confirmar sua presença! ✅\nSeu horário já está garantido em nossa agenda. Até logo! 😊",
+                serviceId: DIGISAC_CONFIG.SERVICE_ID,
+                dontRead: false
+            };
+
+            try {
+                await fetch(`${DIGISAC_CONFIG.URL}/api/v1/messages`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${DIGISAC_CONFIG.TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                console.log("Notificação enviada ao DigiSac");
+            } catch (error) {
+                console.error("Erro ao notificar DigiSac:", error);
+            }
         }
 
         async function carregarDados() {
@@ -94,6 +134,9 @@
                 const agendamento = (json.data || []).find(a => Number(a.id) === aid);
 
                 if (agendamento) {
+                    // Armazena o telefone para uso posterior
+                    telefonePaciente = agendamento.patient?.contact_cellphone || null;
+
                     const dataCorrigida = fixDate(agendamento.start_date);
                     document.getElementById('info-paciente').textContent = agendamento.patient?.name || "Paciente";
                     document.getElementById('info-medico').textContent = agendamento.user?.name || "Não informado";
@@ -123,20 +166,24 @@
                     },
                     body: JSON.stringify({
                         patient_id: Number(pid),
-                        attendance_id: Number(aid) // Volte para attendance_id, mas garanta que é Number
+                        attendance_id: Number(aid)
                     })
                 });
 
-                const result = await response.json();
-
                 if (response.ok) {
+                    // 1. Sucesso visual na página
                     document.getElementById('details-card').classList.add('hidden');
                     document.getElementById('success-state').classList.remove('hidden');
                     document.getElementById('status-text').textContent = "Consulta Confirmada";
+
+                    // 2. Disparo imediato para o WhatsApp via DigiSac
+                    if (telefonePaciente) {
+                        enviarAgradecimentoDigisac(telefonePaciente);
+                    }
                 } else {
-                    // Se ainda der erro, vamos logar no console para você ver exatamente o que a API quer
-                    console.log("Erro completo da API:", result);
-                    alert("Erro da API: " + (result.message || result.error || "Erro 400"));
+                    const result = await response.json();
+                    console.log("Erro API Amigo:", result);
+                    alert("Erro ao confirmar: " + (result.message || "Erro 400"));
                     btn.disabled = false;
                     btn.textContent = "Confirmar Agendamento";
                 }
