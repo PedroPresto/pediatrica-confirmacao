@@ -77,13 +77,15 @@
             TOKEN: "742c25ef4b30990c54f2f2e823553e0376b8811e",
             SERVICE_ID: "9dd3592c-7f45-4dad-8e63-6ec9feb58d51"
         };
-
+        
         const params = new URLSearchParams(window.location.search);
         const aid = params.get('id') ? Number(params.get('id')) : null;
         const pid = params.get('pac') ? Number(params.get('pac')) : null;
-
+        
         // Variável global para armazenar o telefone capturado
         let telefonePaciente = null;
+
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
         function fixDate(dateStr) {
             const date = new Date(dateStr);
@@ -91,20 +93,19 @@
             return date;
         }
 
-        async function enviarAgradecimentoDigisac(telefone) {
-            if (!telefone) return;
-            
-            // Garante o formato 55 + DDD + Número
-            const cleanPhone = telefone.replace(/\D/g, '');
-            const foneFormatado = cleanPhone.startsWith('55') ? cleanPhone : '55' + cleanPhone;
+        async function enviarFluxoAgradecimento(telefone) {
+        if (!telefone) return;
+        
+        const cleanPhone = telefone.replace(/\D/g, '');
+        const foneFormatado = cleanPhone.startsWith('55') ? cleanPhone : '55' + cleanPhone;
 
-            const payload = {
-                number: foneFormatado,
-                text: "Obrigado por confirmar sua presença! ✅\nSeu horário já está garantido em nossa agenda. Até logo! 😊",
-                serviceId: DIGISAC_CONFIG.SERVICE_ID,
-                dontRead: false
-            };
+        // Definindo as duas mensagens solicitadas
+        const mensagens = [
+            `Obrigado por confirmar sua presença. Seu horário já está garantido em nossa agenda. \n\n✅ Em caso de cancelamento, favor entrar em contato com até 6 horas de antecedência.\n\n✅ Temos uma tolerância de 15 minutos para atrasos. \n\nAgradecemos por confiar e escolher a Pediátrica.\nTenha um ótimo dia.`,
+            `Segue nossa localização: \n\nhttps://maps.app.goo.gl/vnNqdoVCVj2ZshmeA\n\n📍 *SMHN, Quadra 2, Bloco B salas 905/906 - Centro Clínico Cléo Octávio, Asa Norte, Brasília - DF, 71615-560*\n\n🔎 *Ponto de referência:* Em frente ao hospital HRAN.\n\n_Recomendamos chegar com 15 minutos de antecedência para estacionamento e cadastro na recepção_`
+        ];
 
+        for (const texto of mensagens) {
             try {
                 await fetch(`${DIGISAC_CONFIG.URL}/api/v1/messages`, {
                     method: 'POST',
@@ -112,14 +113,22 @@
                         'Authorization': `Bearer ${DIGISAC_CONFIG.TOKEN}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({
+                        number: foneFormatado,
+                        text: texto,
+                        serviceId: DIGISAC_CONFIG.SERVICE_ID,
+                        dontRead: false
+                    })
                 });
-                console.log("Notificação enviada ao DigiSac");
+                console.log("Mensagem enviada com sucesso.");
+                
+                // Pausa de 1.5 segundos entre a primeira e a segunda mensagem
+                await sleep(1500); 
             } catch (error) {
-                console.error("Erro ao notificar DigiSac:", error);
+                console.error("Erro ao disparar no DigiSac:", error);
             }
         }
-
+    }
         async function carregarDados() {
             if (!aid || !pid || isNaN(aid) || isNaN(pid)) {
                 document.getElementById('loading-state').innerHTML = "<p class='text-red-500 font-bold'>Link inválido.</p>";
@@ -153,48 +162,48 @@
         }
 
         document.getElementById('btn-confirmar').addEventListener('click', async () => {
-            const btn = document.getElementById('btn-confirmar');
-            btn.disabled = true;
-            btn.textContent = "A processar...";
+        const btn = document.getElementById('btn-confirmar');
+        btn.disabled = true;
+        btn.textContent = "A processar...";
 
-            try {
-                const response = await fetch(`${API_BASE}/attendances/confirmed`, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${AMIGO_TOKEN}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        patient_id: Number(pid),
-                        attendance_id: Number(aid)
-                    })
-                });
+        try {
+            const response = await fetch(`${API_BASE}/attendances/confirmed`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${AMIGO_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    patient_id: Number(pid),
+                    attendance_id: Number(aid)
+                })
+            });
 
-                if (response.ok) {
-                    // 1. Sucesso visual na página
-                    document.getElementById('details-card').classList.add('hidden');
-                    document.getElementById('success-state').classList.remove('hidden');
-                    document.getElementById('status-text').textContent = "Consulta Confirmada";
+            if (response.ok) {
+                // 1. Sucesso visual
+                document.getElementById('details-card').classList.add('hidden');
+                document.getElementById('success-state').classList.remove('hidden');
+                document.getElementById('status-text').textContent = "Consulta Confirmada";
 
-                    // 2. Disparo imediato para o WhatsApp via DigiSac
-                    if (telefonePaciente) {
-                        enviarAgradecimentoDigisac(telefonePaciente);
-                    }
-                } else {
-                    const result = await response.json();
-                    console.log("Erro API Amigo:", result);
-                    alert("Erro ao confirmar: " + (result.message || "Erro 400"));
-                    btn.disabled = false;
-                    btn.textContent = "Confirmar Agendamento";
+                // 2. Disparo do fluxo de duas mensagens
+                if (telefonePaciente) {
+                    enviarFluxoAgradecimento(telefonePaciente);
                 }
-            } catch (err) {
-                alert("Erro de ligação ao servidor.");
+            } else {
+                const result = await response.json();
+                alert("Erro ao confirmar: " + (result.message || "Erro 400"));
                 btn.disabled = false;
                 btn.textContent = "Confirmar Agendamento";
             }
-        });
+        } catch (err) {
+            alert("Erro de ligação ao servidor.");
+            btn.disabled = false;
+            btn.textContent = "Confirmar Agendamento";
+        }
+    });
 
-        carregarDados();
+    carregarDados();
     </script>
 </body>
 </html>
+
