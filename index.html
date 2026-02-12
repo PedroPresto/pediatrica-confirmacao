@@ -23,30 +23,17 @@
             <p id="status-text" class="opacity-90 text-sm mt-1">Verifique os dados abaixo</p>
         </div>
 
-        <div class="p-8">
+        <div class="p-6">
             <div id="loading-state" class="flex flex-col items-center py-10">
                 <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
-                <p class="text-slate-500 text-sm">A carregar detalhes da consulta...</p>
+                <p class="text-slate-500 text-sm">A carregar detalhes...</p>
             </div>
 
             <div id="details-card" class="hidden space-y-6">
-                <div class="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                    <div>
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Paciente</p>
-                        <p id="info-paciente" class="font-bold text-slate-800 text-lg">---</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Médico</p>
-                        <p id="info-medico" class="font-semibold text-slate-700">---</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data e Hora</p>
-                        <p id="info-data" class="font-semibold text-slate-700">---</p>
-                    </div>
-                </div>
+                <div id="pacientes-container" class="space-y-4"></div>
 
                 <button id="btn-confirmar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-200 transition-all active:scale-95 disabled:opacity-50">
-                    Confirmar Agendamento
+                    Confirmar Todos os Agendamentos
                 </button>
             </div>
 
@@ -57,7 +44,7 @@
                     </svg>
                 </div>
                 <h2 class="text-2xl font-bold text-slate-800">Confirmado!</h2>
-                <p class="text-slate-600 mt-2">A sua presença foi registrada com sucesso.</p>
+                <p class="text-slate-600 mt-2">As presenças foram registradas com sucesso.</p>
             </div>
         </div>
 
@@ -67,136 +54,138 @@
     </div>
 
     <script>
-        // CONFIGURAÇÕES
         const AMIGO_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJjb21wYW55X2lkIjoxMzc2LCJ1c2VyX2lkIjoxMTMyMn0.wdb2Q2uUJm6hZWr9vrwAae2-FM1eHSAuERKLWLBDTf8";
         const API_BASE = "https://amigobot-api.amigoapp.com.br";
         
-        // CONFIGURAÇÃO TEMPORÁRIA DIGISAC (Preencha para a Demo)
         const DIGISAC_CONFIG = {
             URL: "https://clinicamultidiciplinar.digisac.chat", 
             TOKEN: "742c25ef4b30990c54f2f2e823553e0376b8811e",
             SERVICE_ID: "9dd3592c-7f45-4dad-8e63-6ec9feb58d51"
         };
-        
-       const params = new URLSearchParams(window.location.search);
-    const aidParam = params.get('id'); 
-    const pidParam = params.get('pac');
 
-    let telefonePaciente = null;
-    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        const params = new URLSearchParams(window.location.search);
+        const aidParam = params.get('id'); 
+        const pidParam = params.get('pac');
 
-    function fixDate(dateStr) {
-        const date = new Date(dateStr);
-        date.setHours(date.getHours() + 3);
-        return date;
-    }
+        let telefonePaciente = null;
 
-    async function enviarFluxoAgradecimento(telefone) {
-        if (!telefone) return;
-        const cleanPhone = telefone.replace(/\D/g, '');
-        const foneFormatado = cleanPhone.startsWith('55') ? cleanPhone : '55' + cleanPhone;
+        function fixDate(dateStr) {
+            const date = new Date(dateStr);
+            date.setHours(date.getHours() + 3);
+            return date;
+        }
 
-        const mensagens = [
+        async function enviarFluxoAgradecimento(telefone) {
+            if (!telefone) return;
+            const cleanPhone = telefone.replace(/\D/g, '');
+            const foneFormatado = cleanPhone.startsWith('55') ? cleanPhone : '55' + cleanPhone;
+
+            const mensagens = [
             `Obrigado por confirmar sua presença. Seu horário já está garantido em nossa agenda. \n\n✅ Em caso de cancelamento, favor entrar em contato com até 6 horas de antecedência.\n\n✅ Temos uma tolerância de 15 minutos para atrasos. \n\nAgradecemos por confiar e escolher a Pediátrica.\nTenha um ótimo dia.`,
             `Segue nossa localização: \n\nhttps://maps.app.goo.gl/vnNqdoVCVj2ZshmeA\n\n📍 *SMHN, Quadra 2, Bloco B salas 905/906 - Centro Clínico Cléo Octávio, Asa Norte, Brasília - DF, 71615-560*\n\n🔎 *Ponto de referência:* Em frente ao hospital HRAN.\n\n_Recomendamos chegar com 15 minutos de antecedência para estacionamento e cadastro na recepção_`
         ];
 
-        for (const texto of mensagens) {
+            for (const texto of mensagens) {
+                try {
+                    await fetch(`${DIGISAC_CONFIG.URL}/api/v1/messages`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${DIGISAC_CONFIG.TOKEN}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ number: foneFormatado, text: texto, serviceId: DIGISAC_CONFIG.SERVICE_ID })
+                    });
+                    await new Promise(r => setTimeout(r, 1500));
+                } catch (e) { console.error(e); }
+            }
+        }
+
+        async function carregarDados() {
+            if (!aidParam || !pidParam) {
+                document.getElementById('loading-state').innerHTML = "<p class='text-red-500 font-bold'>Link inválido.</p>";
+                return;
+            }
+
+            const aids = aidParam.split(',');
+            const pids = pidParam.split(',');
+
             try {
-                await fetch(`${DIGISAC_CONFIG.URL}/api/v1/messages`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${DIGISAC_CONFIG.TOKEN}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ number: foneFormatado, text: texto, serviceId: DIGISAC_CONFIG.SERVICE_ID })
+                // Buscamos os dados usando o primeiro PID
+                const response = await fetch(`${API_BASE}/attendances/${pids[0]}`, {
+                    headers: { 'Authorization': `Bearer ${AMIGO_TOKEN}` }
                 });
-                await sleep(1500); 
-            } catch (e) { console.error(e); }
-        }
-    }
+                const json = await response.json();
+                const agendamentos = (json.data || []).filter(a => aids.includes(String(a.id)));
 
-    async function carregarDados() {
-        if (!aidParam || !pidParam) {
-            document.getElementById('loading-state').innerHTML = "<p class='text-red-500 font-bold'>Link inválido.</p>";
-            return;
-        }
+                if (agendamentos.length > 0) {
+                    telefonePaciente = agendamentos[0].patient?.contact_cellphone || null;
+                    const container = document.getElementById('pacientes-container');
+                    
+                    // Criamos um bloco visual para cada irmão
+                    agendamentos.forEach(a => {
+                        const dataCorr = fixDate(a.start_date);
+                        const html = `
+                            <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                <p class="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-2">Agendamento</p>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="col-span-2">
+                                        <p class="text-[10px] font-bold text-slate-400 uppercase">Paciente</p>
+                                        <p class="font-bold text-slate-800">${a.patient?.name}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] font-bold text-slate-400 uppercase">Médico</p>
+                                        <p class="text-sm font-semibold text-slate-700">${a.user?.name}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] font-bold text-slate-400 uppercase">Hora</p>
+                                        <p class="text-sm font-semibold text-slate-700">${dataCorr.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        container.innerHTML += html;
+                    });
 
-        const aids = aidParam.split(',');
-        const pids = pidParam.split(',');
-        const mainPid = pids[0]; // Usamos o primeiro PID como base de busca
-
-        try {
-            const response = await fetch(`${API_BASE}/attendances/${mainPid}`, {
-                headers: { 'Authorization': `Bearer ${AMIGO_TOKEN}` }
-            });
-            const json = await response.json();
-            
-            // Filtra os agendamentos que estão na URL
-            const agendamentos = (json.data || []).filter(a => aids.includes(String(a.id)));
-
-            if (agendamentos.length > 0) {
-                telefonePaciente = agendamentos[0].patient?.contact_cellphone || null;
-                
-                // Exibe os nomes: "Irmão A e Irmão B"
-                const nomes = agendamentos.map(a => a.patient?.name).join(' e ');
-                const dataCorrigida = fixDate(agendamentos[0].start_date);
-
-                document.getElementById('info-paciente').textContent = nomes;
-                document.getElementById('info-medico').textContent = agendamentos[0].user?.name || "Não informado";
-                document.getElementById('info-data').textContent = dataCorrigida.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-                
-                document.getElementById('loading-state').classList.add('hidden');
-                document.getElementById('details-card').classList.remove('hidden');
-            } else {
-                throw new Error("Consultas não encontradas.");
+                    document.getElementById('loading-state').classList.add('hidden');
+                    document.getElementById('details-card').classList.remove('hidden');
+                } else {
+                    throw new Error("Nenhum agendamento encontrado.");
+                }
+            } catch (err) {
+                document.getElementById('loading-state').innerHTML = "<p class='text-red-500 font-bold'>Erro ao carregar dados.</p>";
             }
-        } catch (err) {
-            document.getElementById('loading-state').innerHTML = `<p class='text-red-500 font-bold'>Erro ao carregar dados.</p>`;
         }
-    }
 
-    document.getElementById('btn-confirmar').addEventListener('click', async () => {
-        const btn = document.getElementById('btn-confirmar');
-        btn.disabled = true;
-        btn.textContent = "A confirmar agendamentos...";
+        document.getElementById('btn-confirmar').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-confirmar');
+            btn.disabled = true;
+            btn.textContent = "Confirmando...";
 
-        const aids = aidParam.split(',');
-        const pids = pidParam.split(',');
+            const aids = aidParam.split(',');
+            const pids = pidParam.split(',');
 
-        try {
-            // Loop de confirmação
-            for (let i = 0; i < aids.length; i++) {
-                // Se só tiver um pac na URL, usa ele para todos os atendimentos
-                const currentPid = pids[i] || pids[0]; 
-                
-                await fetch(`${API_BASE}/attendances/confirmed`, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${AMIGO_TOKEN}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        patient_id: Number(currentPid),
-                        attendance_id: Number(aids[i])
-                    })
-                });
+            try {
+                for (let i = 0; i < aids.length; i++) {
+                    await fetch(`${API_BASE}/attendances/confirmed`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${AMIGO_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            patient_id: Number(pids[i] || pids[0]),
+                            attendance_id: Number(aids[i])
+                        })
+                    });
+                }
+
+                document.getElementById('details-card').classList.add('hidden');
+                document.getElementById('success-state').classList.remove('hidden');
+                if (telefonePaciente) enviarFluxoAgradecimento(telefonePaciente);
+            } catch (err) {
+                alert("Erro ao confirmar.");
+                btn.disabled = false;
             }
+        });
 
-            document.getElementById('details-card').classList.add('hidden');
-            document.getElementById('success-state').classList.remove('hidden');
-            document.getElementById('status-text').textContent = "Consultas Confirmadas";
-
-            if (telefonePaciente) {
-                enviarFluxoAgradecimento(telefonePaciente);
-            }
-        } catch (err) {
-            alert("Erro ao confirmar.");
-            btn.disabled = false;
-        }
-    });
-
-    carregarDados();
-</script>
+        carregarDados();
+    </script>
 </body>
 </html>
-
-
-
