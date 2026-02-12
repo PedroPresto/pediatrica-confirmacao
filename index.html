@@ -130,33 +130,46 @@
             telefonePaciente = agendamentosFiltrados[0].patient?.contact_cellphone || null;
 
             agendamentosFiltrados.forEach(a => {
-                const dataCorr = fixDate(a.start_date);
-                const html = `
-                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-sm mb-3">
-                        <div class="flex items-center gap-2 mb-2">
-                            <div class="w-2 h-2 rounded-full bg-blue-600"></div>
-                            <p class="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Consulta Encontrada</p>
-                        </div>
-                        <div class="space-y-3">
-                            <div>
-                                <p class="text-[10px] font-bold text-slate-400 uppercase font-medium">Paciente</p>
-                                <p class="font-bold text-slate-800 text-base">${a.patient?.name}</p>
-                            </div>
-                            <div class="flex justify-between border-t border-slate-200 pt-2">
-                                <div>
-                                    <p class="text-[10px] font-bold text-slate-400 uppercase font-medium">Médico</p>
-                                    <p class="text-xs font-semibold text-slate-700">${a.user?.name}</p>
-                                </div>
-                                <div class="text-right">
-                                    <p class="text-[10px] font-bold text-slate-400 uppercase font-medium">Horário</p>
-                                    <p class="text-xs font-semibold text-slate-700">${dataCorr.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</p>
-                                </div>
-                            </div>
-                        </div>
+    const dataCorr = fixDate(a.start_date);
+    
+    // 1. Formata a data simples: 12/02/2026
+    const dataNumerica = dataCorr.toLocaleDateString('pt-BR');
+    
+    // 2. Extrai o dia da semana: quinta-feira
+    const diaSemana = dataCorr.toLocaleDateString('pt-BR', { weekday: 'long' });
+    
+    // 3. Formata o horário: 14:30
+    const horaFormatada = dataCorr.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    const html = `
+        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-sm mb-3">
+            <div class="flex items-center gap-2 mb-2">
+                <div class="w-2 h-2 rounded-full bg-blue-600"></div>
+                <p class="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Consulta Encontrada</p>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase font-medium">Paciente</p>
+                    <p class="font-bold text-slate-800 text-base">${a.patient?.name}</p>
+                </div>
+                <div class="flex justify-between border-t border-slate-200 pt-2">
+                    <div class="flex-1">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase font-medium">Médico</p>
+                        <p class="text-xs font-semibold text-slate-700">${a.user?.name}</p>
                     </div>
-                `;
-                container.innerHTML += html;
-            });
+                    <div class="text-right flex-1">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase font-medium">Data e Hora</p>
+                        <p class="text-xs font-semibold text-slate-700 capitalize">
+                            ${dataNumerica} - ${diaSemana}
+                        </p>
+                        <p class="text-xs font-bold text-blue-600">${horaFormatada}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    container.innerHTML += html;
+});
 
             document.getElementById('loading-state').classList.add('hidden');
             document.getElementById('details-card').classList.remove('hidden');
@@ -208,5 +221,6 @@
 </script>
 </body>
 </html>
+
 
 
